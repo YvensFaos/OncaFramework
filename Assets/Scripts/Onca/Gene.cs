@@ -3,10 +3,10 @@
 namespace Onca
 {
     [Serializable]
-    public struct Gene
+    public class Gene
     {
-        public string Name { get; }
-        public float Value { get; private set; }
+        public string Name;
+        public float Value;
 
         public Gene(string name, float value)
         {

@@ -72,5 +72,10 @@ namespace Onca
         {
             return _activeAgents;
         }
+
+        public uint GetCount()
+        {
+            return count;
+        }
     }
 }

@@ -15,18 +15,42 @@ namespace Onca
     {
         public Dictionary<string, Gene> GenesDictionary { get; }
 
-        public AgentData(Gene[] genes)
+        public AgentData(List<Gene> genes)
         {
             GenesDictionary = new Dictionary<string, Gene>();
-            for (int i = 0; i < genes.Length; i++)
+            for (int i = 0; i < genes.Count; i++)
             {
                 GenesDictionary[genes[i].Name] = genes[i];
             }
         }
     }
 
-    [RequireComponent(typeof(Rigidbody), typeof(AgentAction), typeof(PerformanceEvaluator))]
-    public class AgentLogic : MonoBehaviour, IComparable
+    [Serializable]
+    public class AgentProperty
+    {
+        public String Name;
+        public float Value;
+
+        public AgentProperty(string name, float value)
+        {
+            Name = name;
+            Value = value;
+        }
+
+        public void IncrementValue(float increment)
+        {
+            Value += increment;
+        }
+        
+        public void SetValue(float newValue)
+        {
+            Value = newValue;
+        }
+    }
+
+    [RequireComponent(typeof(Rigidbody), typeof(Collider), typeof(AgentColliderHandler))]
+    [RequireComponent(typeof(AgentAction), typeof(PerformanceEvaluator))]
+    public abstract class AgentLogic : MonoBehaviour, IComparable
     {
         private Vector3 _movingDirection;
         private Rigidbody _rigidbody;
@@ -34,8 +58,11 @@ namespace Onca
         [SerializeField] protected float performance;
         private bool _isAwake;
 
-        [Header("Genes")] [SerializeField] private Gene[] genes;
-        private Dictionary<string, Gene> _genesDictionary;
+        [Header("Properties")] [SerializeField] protected List<AgentProperty> properties;
+        protected Dictionary<string, AgentProperty> _properties;
+        
+        [Header("Genes")] [SerializeField] protected List<Gene> genes;
+        protected Dictionary<string, Gene> _genes;
 
         [Header("Special Genes")] [SerializeField, Tooltip("Steps for the area of sight.")]
         private float steps;
@@ -55,6 +82,9 @@ namespace Onca
         [Header("Performance Evaluator")] [SerializeField]
         private PerformanceEvaluator evaluator;
 
+        [Header("Collider / Trigger Handlers")] [SerializeField]
+        private AgentColliderHandler colliderHandler;
+
         [Space(10)] [Header("Debug & Help")] [SerializeField]
         private Color visionColor;
 
@@ -67,7 +97,7 @@ namespace Onca
         private void Awake()
         {
             Initiate();
-
+            
             agentActions = GetComponents<AgentAction>();
         }
 
@@ -78,34 +108,49 @@ namespace Onca
         {
             _rigidbody = GetComponent<Rigidbody>();
 
-            _genesDictionary = new Dictionary<string, Gene>();
+            _genes = new Dictionary<string, Gene>();
+            
+            genes.Add(new Gene("steps", steps));
+            genes.Add(new Gene("sightDivisions", sightDivisions));
+            genes.Add(new Gene("sight", sight));
+            genes.Add(new Gene("movingSpeed", movingSpeed));
+            genes.Add(new Gene("maxUtilityChoiceChance", maxUtilityChoiceChance));
 
             foreach (Gene gene in genes)
             {
-                _genesDictionary[gene.Name] = gene;
+                _genes[gene.Name] = gene;
             }
-
-            _genesDictionary["steps"] = new Gene("steps", steps);
-            _genesDictionary["sightDivisions"] = new Gene("sightDivisions", sightDivisions);
-            _genesDictionary["sight"] = new Gene("sight", sight);
-            _genesDictionary["movingSpeed"] = new Gene("movingSpeed", movingSpeed);
-            _genesDictionary["maxUtilityChoiceChance"] = new Gene("maxUtilityChoiceChance", maxUtilityChoiceChance);
+            
+            _properties = new Dictionary<string, AgentProperty>();
+            CreateProperties();
+            foreach (AgentProperty agentProperty in properties)
+            {
+                _properties[agentProperty.Name] = agentProperty;
+            }
         }
 
         public void Birth(AgentData agentData)
         {
-            _genesDictionary = agentData.GenesDictionary;
+            _genes.Clear();
+            foreach (KeyValuePair<string,Gene> gene in agentData.GenesDictionary)
+            {
+                _genes.Add(gene.Key, new Gene(gene.Value));
+            }
 
             AssignSpecialGenes();
+            CalculateProperties();
         }
+
+        protected abstract void CreateProperties();
+        protected abstract void CalculateProperties();
 
         private void AssignSpecialGenes()
         {
-            steps = _genesDictionary["steps"].Value;
-            sightDivisions = _genesDictionary["sightDivisions"].Value;
-            sight = _genesDictionary["sight"].Value;
-            movingSpeed = _genesDictionary["movingSpeed"].Value;
-            maxUtilityChoiceChance = _genesDictionary["maxUtilityChoiceChance"].Value;
+            steps = _genes["steps"].Value;
+            sightDivisions = _genes["sightDivisions"].Value;
+            sight = _genes["sight"].Value;
+            movingSpeed = _genes["movingSpeed"].Value;
+            maxUtilityChoiceChance = _genes["maxUtilityChoiceChance"].Value;
         }
 
         /// <summary>
@@ -115,23 +160,23 @@ namespace Onca
         /// <param name="mutationChance">Chance of a mutation happening per gene / weight.</param>
         public void Mutate(float mutationFactor, float mutationChance)
         {
-            foreach (Gene gene in genes)
+            genes.RemoveRange(0, genes.Count);
+            foreach (KeyValuePair<string, Gene> gene in _genes)
             {
                 if (Random.Range(0.0f, 100.0f) <= mutationChance)
                 {
-                    gene.Mutate(Random.Range(-mutationFactor, +mutationFactor));
+                    gene.Value.Mutate(Random.Range(-mutationFactor, +mutationFactor));
                 }
+                genes.Add(gene.Value);
             }
-
             AssignSpecialGenes();
         }
 
-        private void Update()
+        protected void Update()
         {
+            // _rigidbody.velocity = Vector3.zero;
             if (_isAwake)
             {
-                _rigidbody.velocity = Vector3.zero;
-
                 List<AgentLookData> lookData = LookAround();
                 Vector3 actionDirection = Act(lookData);
             
@@ -156,7 +201,7 @@ namespace Onca
             List<AgentLookData> objectsSeen = new List<AgentLookData>();
             for (uint i = 0; i <= (uint) sightDivisions; i++)
             {
-                bool hasHitSomething = Physics.Raycast(selfPosition, rayDirection, out RaycastHit raycastHit);
+                bool hasHitSomething = Physics.Raycast(selfPosition, rayDirection, out RaycastHit raycastHit, sight);
                 objectsSeen.Add(new AgentLookData(rayDirection, hasHitSomething, raycastHit));
                 if (debug)
                 {
@@ -179,12 +224,16 @@ namespace Onca
         {
             foreach (AgentAction agentAction in agentActions)
             {
-                agentAction.CalculateUtility(_genesDictionary, lookData);
+                agentAction.CalculateUtility(_genes, _properties, lookData);
             }
             
             Array.Sort(agentActions);
-            int index = Random.Range(0.0f, 100.0f) < maxUtilityChoiceChance ? 0 : 1;
-            return agentActions[index].Act(_genesDictionary);
+            int index = 0;
+            if (agentActions.Length > 1)
+            {
+                index = (Random.Range(0.0f, 100.0f) < maxUtilityChoiceChance) ? 0 : 1;    
+            }
+            return agentActions[index].Act(_genes);
         }
 
         public void WakeUp()
@@ -201,6 +250,11 @@ namespace Onca
         public float GetPerformance()
         {
             return performance;
+        }
+
+        public float GetProperty(string property)
+        {
+            return _properties[property].Value;
         }
 
         /// <summary>
@@ -224,9 +278,9 @@ namespace Onca
             }
         }
 
-        public float CalculatePerformance(Environment environment)
+        public void CalculatePerformance(Environment environment)
         {
-            return evaluator.EvaluatePerfomance(this, environment);
+            performance = evaluator.EvaluatePerfomance(this, environment);
         }
 
         /// <summary>
@@ -236,6 +290,36 @@ namespace Onca
         public AgentData GetData()
         {
             return new AgentData(genes);
+        }
+
+        private void OnCollisionEnter(Collision other)
+        {
+            colliderHandler.AgentCollisionEnter(_genes, _properties, other);
+        }
+
+        private void OnCollisionExit(Collision other)
+        {
+            colliderHandler.AgentCollisionExit(_genes, _properties, other);
+        }
+
+        private void OnCollisionStay(Collision other)
+        {
+            colliderHandler.AgentCollisionStay(_genes, _properties, other);
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            colliderHandler.AgentTriggerEnter(_genes, _properties, other);
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            colliderHandler.AgentTriggerExit(_genes, _properties, other);
+        }
+
+        private void OnTriggerStay(Collider other)
+        {
+            colliderHandler.AgentTriggerStay(_genes, _properties, other);
         }
     }
 }

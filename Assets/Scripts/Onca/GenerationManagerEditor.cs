@@ -17,9 +17,9 @@ namespace Onca
             {
                 (target as GenerationManager)?.GenerateObjects();
             }
-            if (GUILayout.Button("Generate Boats/Pirates"))
+            if (GUILayout.Button("Generate Agents"))
             {
-                // (target as GenerationManager)?.GenerateObjects();
+                (target as GenerationManager)?.GenerateAgents();
             }
             if (GUILayout.Button("Start Simulation"))
             {

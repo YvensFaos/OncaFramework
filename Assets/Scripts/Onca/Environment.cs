@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Onca
 {
     [Serializable]
-    public class EnvironmentProperty
+    public struct EnvironmentProperty
     {
         public string name;
         public float Value { get; set; }
@@ -14,6 +14,11 @@ namespace Onca
         {
             this.name = name;
             Value = value;
+        }
+
+        public void ChangeValue(float newValue)
+        {
+            Value = newValue;
         }
     }
 
@@ -41,7 +46,7 @@ namespace Onca
     
         public void UpdateEnvironmentPropertyValue(string propertyName, float newValue)
         {
-            _environmentProperties[propertyName].Value = newValue;
+            _environmentProperties[propertyName].ChangeValue(newValue);
         }
     }
 }

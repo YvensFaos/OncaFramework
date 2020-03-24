@@ -1,49 +1,66 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
 namespace Onca
 {
+    [RequireComponent(typeof(Environment))]
     public class GenerationManager : MonoBehaviour
     {
-        [Header("Generators")]
-        [SerializeField]
+        [Header("Generators")] [SerializeField]
         private GenerateObjectsInArea[] objectsGenerators;
-        [SerializeField]
-        private GenerateAgentsInArea[] agentsGenerators;
-        [SerializeField] 
-        private Environment environment;
 
-        [Space(10)]
-        [Header("Parenting and Mutation")]
-        [SerializeField]
+        [SerializeField] private GenerateAgentsInArea[] agentsGenerators;
+        [SerializeField] private Environment environment;
+
+        [Space(10)] [Header("Parenting and Mutation")] [SerializeField]
         private float mutationFactor;
-        [SerializeField] 
-        private float mutationChance;
-        [SerializeField] 
-        private int parentSize;
 
-        [Space(10)] 
-        [Header("Simulation Controls")]
-        [SerializeField, Tooltip("Time per simulation (in seconds).")]
+        [SerializeField] private float mutationChance;
+        [SerializeField] private int parentSize;
+
+        [Space(10)] [Header("Simulation Controls")] [SerializeField, Tooltip("Time per simulation (in seconds).")]
         private float simulationTimer;
+
         [SerializeField, Tooltip("Current time spent on this simulation.")]
         private float simulationCount;
+
         [SerializeField, Tooltip("Automatically starts the simulation on Play.")]
         private bool runOnStart;
+
         [SerializeField, Tooltip("Initial count for the simulation. Used for the Prefabs naming.")]
         private int generationCount;
 
-        [Space(10)] 
-        [Header("Prefab Saving")]
-        [SerializeField]
+        [Space(10)] [Header("Prefab Saving")] [SerializeField]
         private string savePrefabsAt;
-        [SerializeField] 
-        private string generationName;
-    
+
+        [SerializeField] private string generationName;
+
         private bool _runningSimulation;
-    
+
+        #region Singleton
+
+        private static GenerationManager _instance;
+
+        public static GenerationManager GetInstance()
+        {
+            return _instance;
+        }
+
+        #endregion
+
+        private void Awake()
+        {
+            if (environment == null)
+            {
+                environment = GetComponent<Environment>();
+            }
+
+            GenerationManager._instance = this;
+        }
+
         private void Start()
         {
             if (runOnStart)
@@ -51,7 +68,7 @@ namespace Onca
                 StartSimulation();
             }
         }
-    
+
         private void Update()
         {
             if (_runningSimulation)
@@ -62,7 +79,8 @@ namespace Onca
                     ++generationCount;
                     MakeNewGeneration();
                     simulationCount = -Time.deltaTime;
-                } 
+                }
+
                 simulationCount += Time.deltaTime;
             }
         }
@@ -75,14 +93,17 @@ namespace Onca
             }
         }
 
-        public void GenerateAgents()
+        public void GenerateAgents(bool wakeUpAgents = false)
         {
             foreach (GenerateAgentsInArea agentGenerator in agentsGenerators)
             {
-                agentGenerator.RegenerateObjects();
+                agentGenerator.RegenerateObjects().ForEach(logic =>
+                {
+                    if (wakeUpAgents) logic.WakeUp();
+                });
             }
         }
-    
+
         /// <summary>
         /// Creates a new generation by using GenerateBoxes and GenerateBoats/Pirates.
         /// Previous generations will be removed and the best parents will be selected and used to create the new generation.
@@ -98,27 +119,37 @@ namespace Onca
                 List<AgentLogic> agentLogics = agentGenerator.GetActiveAgents();
                 agentLogics.RemoveAll(logic => logic == null);
                 agentLogics.ForEach(logic => logic.CalculatePerformance(environment));
-                agentLogics.Sort();
-            
-                AgentLogic[] parents = new AgentLogic[parentSize];
-                for (int i = 0; i < parentSize; i++)
-                {
-                    parents[i] = agentLogics[i];
-                }
 
-                AgentLogic lastWinner = parents[0];
-                lastWinner.name += generationName + "[" + generationCount + "]";
-                PrefabUtility.SaveAsPrefabAsset(lastWinner.gameObject, savePrefabsAt + lastWinner.name + ".prefab");
-            
-                List<AgentLogic> newAgents = agentGenerator.RegenerateObjects();
-            
-                newAgents.ForEach(agent =>
+                if (agentLogics.Count > 0)
                 {
-                    AgentLogic parent = parents[Random.Range(0, parentSize)];
-                    agent.Birth(parent.GetData());
-                    agent.Mutate(mutationFactor, mutationChance);
-                    agent.WakeUp();
-                });
+                    agentLogics.Sort();
+
+                    uint generated = agentGenerator.GetCount();
+                    uint actualParentsSize = (uint) Mathf.Min(agentLogics.Count, Mathf.Min(generated, parentSize));
+                    AgentLogic[] parents = new AgentLogic[actualParentsSize];
+                    for (int i = 0; i < actualParentsSize; i++)
+                    {
+                        parents[i] = agentLogics[i];
+                    }
+
+                    AgentLogic lastWinner = parents[0];
+                    lastWinner.name += generationName + "[" + generationCount + "]";
+                    PrefabUtility.SaveAsPrefabAsset(lastWinner.gameObject, savePrefabsAt + lastWinner.name + ".prefab");
+
+                    List<AgentLogic> newAgents = agentGenerator.RegenerateObjects();
+
+                    newAgents.ForEach(agent =>
+                    {
+                        AgentLogic parent = parents[Random.Range(0, (int)actualParentsSize)];
+                        agent.Birth(parent.GetData());
+                        agent.Mutate(mutationFactor, mutationChance);
+                        agent.WakeUp();
+                    });
+                }
+                else
+                {
+                    agentGenerator.RegenerateObjects().ForEach(agent => {agent.WakeUp();});
+                }
             }
         }
 
@@ -129,7 +160,7 @@ namespace Onca
         public void StartSimulation()
         {
             GenerateObjects();
-            GenerateAgents();
+            GenerateAgents(true);
             _runningSimulation = true;
         }
 
@@ -142,7 +173,7 @@ namespace Onca
             MakeNewGeneration();
             _runningSimulation = true;
         }
-     
+
         /// <summary>
         /// Stops the count for the simulation. It also removes null (Destroyed) boats from the _activeBoats list and sets
         /// all boats and pirates to Sleep.
@@ -157,6 +188,11 @@ namespace Onca
                 agentLogics.RemoveAll(logic => logic == null);
                 agentLogics.ForEach(logic => logic.Sleep());
             }
+        }
+
+        public Environment GetEnvironment()
+        {
+            return environment;
         }
     }
 }

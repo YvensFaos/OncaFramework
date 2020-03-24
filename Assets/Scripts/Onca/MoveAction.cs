@@ -11,21 +11,23 @@ namespace Onca
     
         public void Awake()
         {
+            base.Awake();
             _rigidbody = GetComponent<Rigidbody>();
         }
 
-        public override float CalculateUtility(Dictionary<string, Gene> genes, List<AgentLookData> lookData)
+        public override float CalculateUtility(Dictionary<string, Gene> genes, Dictionary<string, AgentProperty> properties, List<AgentLookData> lookData)
         {
             float highestUtility = float.MinValue;
             lookData.ForEach(data =>
             {
-                float utility = agentProgram.UtilityFunction(genes, data);
+                float utility = agentProgram.UtilityFunction(genes, properties, data);
                 if (utility > highestUtility)
                 {
                     highestUtility = utility;
                     _highestData = data;
                 }
             });
+            currentUtility = highestUtility;
             return highestUtility;
         }
 

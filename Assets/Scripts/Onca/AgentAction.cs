@@ -7,18 +7,20 @@ namespace Onca
     [RequireComponent(typeof(AgentProgram))]
     public abstract class AgentAction : MonoBehaviour, IComparable
     {
+        [SerializeField]
         protected AgentProgram agentProgram;
+        [SerializeField]
         protected float currentUtility;
 
-        private void Awake()
+        protected void Awake()
         {
             if (agentProgram == null)
             {
-                Debug.LogError(this.name + " has an AgentAction without a proper AgentProgram.");
+                Debug.LogError(name + " has an AgentAction without a proper AgentProgram.");
             }
         }
     
-        public abstract float CalculateUtility(Dictionary<string, Gene> genes, List<AgentLookData> lookData);
+        public abstract float CalculateUtility(Dictionary<string, Gene> genes, Dictionary<string, AgentProperty> properties, List<AgentLookData> lookData);
 
         public abstract Vector3 Act(Dictionary<string, Gene> genes);
     
@@ -36,10 +38,7 @@ namespace Onca
             {
                 return otherAgentAction.GetCurrentUtility().CompareTo(GetCurrentUtility());
             }
-            else
-            {
-                throw new ArgumentException("Object is not an AgentAction");
-            }
+            throw new ArgumentException("Object is not an AgentAction");
         }
     }
 }
