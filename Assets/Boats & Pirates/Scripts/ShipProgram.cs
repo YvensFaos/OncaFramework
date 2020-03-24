@@ -8,7 +8,8 @@ public class ShipProgram : AgentProgram
         AgentLookData lookData)
     {
         RaycastHit raycastHit = lookData.Hit;
-        float utility = -1.0f;
+        float randomUtility = genes["RandomUtility"].Value;
+        float utility = Random.Range(-randomUtility, randomUtility);
         
         if (raycastHit.transform != null)
         {
@@ -29,7 +30,6 @@ public class ShipProgram : AgentProgram
                     utility = distanceFactor * genes["Dpirate"].Value + genes["Wpirate"].Value;
                     break;
             } 
-            Debug.Log("Here! Found a " + gameObjectTag + " with U(x) of " + utility);
         }
         return utility;
     }

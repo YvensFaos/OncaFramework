@@ -174,7 +174,7 @@ namespace Onca
 
         protected void Update()
         {
-            // _rigidbody.velocity = Vector3.zero;
+            _rigidbody.velocity = Vector3.zero;
             if (_isAwake)
             {
                 List<AgentLookData> lookData = LookAround();

@@ -65,7 +65,7 @@ BoxCollider:
   m_IsTrigger: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Size: {x: 4.38, y: 6.21, z: 9.13}
+  m_Size: {x: 4.38, y: 8, z: 9.13}
   m_Center: {x: 0, y: 3.4, z: 0.87}
 --- !u!114 &6745046314285474193
 MonoBehaviour:
@@ -144,6 +144,8 @@ MonoBehaviour:
     Value: -1
   - Name: Wpirate
     Value: -2
+  - Name: RandomUtility
+    Value: 2
   steps: 10
   sightDivisions: 16
   sight: 20
